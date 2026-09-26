@@ -4,6 +4,7 @@
   languages.go.enable = true;
 
   editors.neovim.enable = true;
+  editors.vscode.enable = true;
 
   # Add settings to the bridged server...
   lsp.servers.gopls.settings.gopls.gofumpt = true;

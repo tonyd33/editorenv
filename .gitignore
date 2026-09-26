@@ -14,3 +14,4 @@ devenv.local.yaml
 /examples/*/lsp-local-test
 /examples/*/.nvim.lua
 .nvim.lua
+.vscode

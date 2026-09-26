@@ -66,6 +66,53 @@ in
     touch $out
   '';
 
+  vscode =
+    let
+      project = editorenv.mkProject {
+        inherit pkgs;
+        modules = [ ./vscode.nix ];
+      };
+      parse =
+        path:
+        builtins.fromJSON (
+          lib.concatStringsSep "\n" (
+            lib.drop 1 (
+              lib.splitString "\n" (builtins.unsafeDiscardStringContext project.editors.files.${path}.text)
+            )
+          )
+        );
+      settings = parse ".vscode/settings.json";
+      extensions = parse ".vscode/extensions.json";
+      exe = name: builtins.unsafeDiscardStringContext (lib.getExe project.lsp.servers.${name}.package);
+    in
+    assert
+      settings == {
+        "rust-analyzer.cargo.features" = "all";
+        "rust-analyzer.cargo.extraEnv" = { };
+        "rust-analyzer.check.command" = "clippy";
+        "rust-analyzer.server.path" = exe "rust_analyzer";
+        gopls = {
+          "ui.semanticTokens" = true;
+          gofumpt = true;
+        };
+        "nix.enableLanguageServer" = true;
+        "nix.serverPath" = exe "nixd";
+        "nix.serverSettings".nixd.formatting.command = [ "nixfmt" ];
+        "fake.greeting" = "hello";
+        "editor.formatOnSave" = true;
+      };
+    assert
+      extensions == {
+        recommendations = [
+          "example.other"
+          "golang.go"
+          "jnoortheen.nix-ide"
+          "rust-lang.rust-analyzer"
+        ];
+        unwantedRecommendations = [ "sumneko.lua" ];
+      };
+    pkgs.runCommand "editorenv-vscode" { } "touch $out";
+
   # Nothing enabled -> no files, no hook, no packages.
   empty =
     let

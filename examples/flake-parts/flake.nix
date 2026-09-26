@@ -27,6 +27,7 @@
         {
           editorenv.settings = {
             editors.neovim.enable = true;
+            editors.vscode.enable = true;
 
             lsp.servers = {
               rust_analyzer = {
