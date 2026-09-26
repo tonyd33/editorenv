@@ -26,8 +26,6 @@
 
       checks = forAllSystems (pkgs: import ./tests { inherit pkgs; });
 
-      formatter = forAllSystems (pkgs: pkgs.nixfmt-rfc-style);
-
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShellNoCC {
           packages = [ pkgs.nixfmt ];
