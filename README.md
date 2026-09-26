@@ -118,6 +118,39 @@ Servers that only set `settings` inherit their `cmd` and `filetypes` from
 [nvim-lspconfig](https://github.com/neovim/nvim-lspconfig). Set `command` and
 `filetypes` for servers it doesn't know, or if you don't use it.
 
+## VS Code
+
+```nix
+editors.vscode.enable = true;
+```
+
+writes `.vscode/settings.json` and `.vscode/extensions.json`. VS Code has no
+generic language server client, so each server maps onto its extension:
+
+- `extensions.json` recommends the extension of every enabled server, and lists
+  disabled servers' extensions under `unwantedRecommendations`.
+- `settings` are flattened into dotted keys under their own section
+  (`settings."rust-analyzer".cargo.features` becomes
+  `"rust-analyzer.cargo.features"`). An object with dotted keys stays an
+  object, as `gopls` expects.
+- For servers editorenv knows (`rust_analyzer`, `gopls`, `clangd`, `lua_ls`,
+  `nixd`, `nil_ls`, `hls`, `ruff`, `terraformls`, `tinymist`, `zls`), a set
+  `package` pins the extension to that executable, so VS Code needn't be started
+  from the dev shell.
+- `command`, `filetypes`, `rootMarkers` and `initializationOptions` are not used.
+
+For an extension that reads a different section than the server does, or a
+server editorenv doesn't know, set `editors.vscode.servers.<id>`:
+
+```nix
+editors.vscode.servers.taplo.extension = "tamasfe.even-better-toml";
+editors.vscode.servers.rust_analyzer.settings."rust-analyzer.check.command" = "clippy";
+```
+
+The generated `settings.json` is a read-only link into the Nix store, so
+changing a workspace setting from VS Code's UI fails. Put workspace settings in
+`editors.vscode.settings` instead.
+
 ## How the file gets into the project
 
 devenv writes the generated files through its own `files` option.
@@ -139,6 +172,8 @@ The link points into the Nix store, so ignore it:
 
 ```gitignore
 .nvim.lua
+.vscode/settings.json
+.vscode/extensions.json
 ```
 
 ## Options
@@ -166,6 +201,17 @@ Ids follow [nvim-lspconfig's names](https://github.com/neovim/nvim-lspconfig/tre
 | `servers.<id>.config` | Neovim-only fields merged into `vim.lsp.config()`. Use `lib.generators.mkLuaInline` for Lua values such as `on_attach`. |
 | `servers.<id>.name` | Neovim's name for the server, when it differs from the id. |
 | `extraLua` | Appended to the generated file. |
+
+### `editors.vscode`
+
+| Option | |
+|---|---|
+| `enable` | Generate the config. |
+| `path` | Default `.vscode/settings.json`. |
+| `extensionsPath` | Default `.vscode/extensions.json`. `null` skips it. |
+| `servers.<id>.extension` | Extension that runs the server, when editorenv doesn't know it. |
+| `servers.<id>.settings` | VS Code settings merged over the derived ones. |
+| `settings` | Workspace settings merged over everything else. |
 
 ## Adding an editor
 

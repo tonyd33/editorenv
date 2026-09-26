@@ -1,1 +1,0 @@
-/nix/store/mfjj4pi7srb2zp84v9573yp5wfm9wrz7-nvim.lua

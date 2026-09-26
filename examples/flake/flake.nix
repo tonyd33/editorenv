@@ -16,6 +16,7 @@
         modules = [
           {
             editors.neovim.enable = true;
+            editors.vscode.enable = true;
 
             lsp.servers.zls = {
               package = pkgs.zls;
