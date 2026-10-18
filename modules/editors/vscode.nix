@@ -193,7 +193,9 @@ in
     }
     // lib.optionalAttrs (cfg.extensionsPath != null) {
       ${cfg.extensionsPath}.text = render {
-        recommendations = extensionsWhere true;
+        recommendations = lib.naturalSort (
+          extensionsWhere true ++ lib.optional config.editors.editorconfig.enable "editorconfig.editorconfig"
+        );
         unwantedRecommendations = extensionsWhere false;
       };
     };
