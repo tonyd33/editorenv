@@ -113,6 +113,53 @@ in
       };
     pkgs.runCommand "editorenv-vscode" { } "touch $out";
 
+  editorconfig =
+    let
+      config = (editorenv.evalConfig { modules = [ ./editorconfig.nix ]; }).config;
+      text = config.editors.files.".editorconfig".text;
+      extensions = builtins.fromJSON (
+        lib.concatStringsSep "\n" (
+          lib.drop 1 (lib.splitString "\n" config.editors.files.".vscode/extensions.json".text)
+        )
+      );
+    in
+    assert
+      text == ''
+        # Generated from the project's Nix configuration (editors.editorconfig). Do not edit.
+        root = true
+
+        [*]
+        end_of_line = lf
+        indent_size = 2
+        indent_style = space
+        insert_final_newline = true
+
+        [*.{js,ts}]
+        indent_size = 4
+
+        [Makefile]
+        indent_style = tab
+      '';
+    assert extensions.recommendations == [ "editorconfig.editorconfig" ];
+    pkgs.runCommand "editorenv-editorconfig"
+      {
+        nativeBuildInputs = [ pkgs.editorconfig-core-c ];
+      }
+      ''
+        set -euo pipefail
+        mkdir proj && cd proj
+        cp ${pkgs.writeText "editorconfig" text} .editorconfig
+
+        expect() {
+          local got
+          got=$(editorconfig "$PWD/$1" | sort)
+          [ "$got" = "$2" ] || { printf '%s: expected\n%s\ngot\n%s\n' "$1" "$2" "$got"; exit 1; }
+        }
+        expect a.js "$(printf '%s\n' end_of_line=lf indent_size=4 indent_style=space insert_final_newline=true tab_width=4)"
+        expect Makefile "$(printf '%s\n' end_of_line=lf indent_size=2 indent_style=tab insert_final_newline=true tab_width=2)"
+        touch $out
+      '';
+
   # Nothing enabled -> no files, no hook, no packages.
   empty =
     let

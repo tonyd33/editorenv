@@ -3,4 +3,5 @@
   ./files.nix
   ./editors/neovim.nix
   ./editors/vscode.nix
+  ./editors/editorconfig.nix
 ]

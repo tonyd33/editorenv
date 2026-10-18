@@ -151,6 +151,28 @@ The generated `settings.json` is a read-only link into the Nix store, so
 changing a workspace setting from VS Code's UI fails. Put workspace settings in
 `editors.vscode.settings` instead.
 
+## EditorConfig
+
+```nix
+editors.editorconfig = {
+  enable = true;
+  sections = {
+    "*" = {
+      end_of_line = "lf";
+      insert_final_newline = true;
+      indent_style = "space";
+      indent_size = 2;
+    };
+    Makefile.indent_style = "tab";
+  };
+};
+```
+
+writes `.editorconfig` with `root = true`. Sections are written in name order,
+and a later section overrides an earlier one where both match. Neovim reads
+`.editorconfig` natively. With `editors.vscode` also enabled, `extensions.json`
+recommends `editorconfig.editorconfig`.
+
 ## How the file gets into the project
 
 devenv writes the generated files through its own `files` option.
@@ -174,6 +196,7 @@ The link points into the Nix store, so ignore it:
 .nvim.lua
 .vscode/settings.json
 .vscode/extensions.json
+.editorconfig
 ```
 
 ## Options
@@ -212,6 +235,15 @@ Ids follow [nvim-lspconfig's names](https://github.com/neovim/nvim-lspconfig/tre
 | `servers.<id>.extension` | Extension that runs the server, when editorenv doesn't know it. |
 | `servers.<id>.settings` | VS Code settings merged over the derived ones. |
 | `settings` | Workspace settings merged over everything else. |
+
+### `editors.editorconfig`
+
+| Option | |
+|---|---|
+| `enable` | Generate the file. |
+| `path` | Default `.editorconfig`. |
+| `root` | Default `true`. Write `root = true`. |
+| `sections.<glob>` | Properties for files matching `<glob>`. Booleans and integers are written as-is. |
 
 ## Adding an editor
 
