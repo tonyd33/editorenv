@@ -17,7 +17,7 @@ let
 
   hook = ''
     __editorenv_link() {
-      local src=$1 dest=$2
+      local src=$1 path=$2 dest=$__editorenv_root/$2
       if [ -e "$dest" ] && [ ! -L "$dest" ]; then
         echo "editorenv: not replacing $dest (not a symlink); remove it or set another path" >&2
         return 0
@@ -30,6 +30,47 @@ let
           ln -sfn "$src" "$dest"
         fi
       fi
+      __editorenv_links+=$path$'\t'$src$'\n'
+    }
+    __editorenv_generated() {
+      ${
+        if generated == { } then
+          "return 1"
+        else
+          "case $1 in ${
+            lib.concatMapStringsSep " | " lib.escapeShellArg (lib.attrNames generated)
+          }) return 0 ;; *) return 1 ;; esac"
+      }
+    }
+    # Removes the links recorded last time that are no longer generated, unless
+    # something else has since replaced them, and the directories that leaves
+    # empty.
+    __editorenv_prune() {
+      local path target dest dir
+      [ -f "$__editorenv_manifest" ] || return 0
+      while IFS=$'\t' read -r path target; do
+        __editorenv_generated "$path" && continue
+        dest=$__editorenv_root/$path
+        if [ -L "$dest" ] && [ "$(readlink "$dest")" = "$target" ]; then
+          rm "$dest"
+          dir=$(dirname "$dest")
+          while [ "$dir" != "$__editorenv_root" ] && rmdir "$dir" 2>/dev/null; do
+            dir=$(dirname "$dir")
+          done
+        fi
+      done < "$__editorenv_manifest"
+    }
+    __editorenv_record() {
+      local dir
+      dir=$(dirname "$__editorenv_manifest")
+      if [ -z "$__editorenv_links" ]; then
+        rm -f "$__editorenv_manifest" "$dir/.gitignore"
+        rmdir "$dir" 2>/dev/null || :
+        return 0
+      fi
+      mkdir -p "$dir"
+      [ -e "$dir/.gitignore" ] || echo '*' > "$dir/.gitignore"
+      printf %s "$__editorenv_links" > "$__editorenv_manifest"
     }
     # Mirrors how `nix develop` locates flake.nix.
     __editorenv_find_root() {
@@ -52,15 +93,19 @@ let
       else
         lib.escapeShellArg cfg.root
     }
+    __editorenv_manifest=$__editorenv_root/.editorenv/links
+    __editorenv_links=
   ''
   + lib.concatStrings (
     lib.mapAttrsToList (path: drv: ''
-      __editorenv_link ${drv} "$__editorenv_root"/${lib.escapeShellArg path}
+      __editorenv_link ${drv} ${lib.escapeShellArg path}
     '') generated
   )
   + ''
-    unset -f __editorenv_link __editorenv_find_root
-    unset __editorenv_root
+    __editorenv_prune
+    __editorenv_record
+    unset -f __editorenv_link __editorenv_find_root __editorenv_generated __editorenv_prune __editorenv_record
+    unset __editorenv_root __editorenv_manifest __editorenv_links
   '';
 in
 {
@@ -101,8 +146,9 @@ in
       type = types.lines;
       readOnly = true;
       description = ''
-        Shell code that links the generated files into the project. Never
-        replaces a file that is not a symlink.
+        Shell code that links the generated files into the project, and
+        removes the links it made earlier for files no longer generated. Never
+        replaces or removes a file that is not one of its links.
       '';
     };
 
@@ -119,7 +165,7 @@ in
   config.shell = {
     files = generated;
     packages = lib.unique (config.lsp.packages ++ config.format.packages);
-    hook = if generated == { } then "" else hook;
+    inherit hook;
     devShell = pkgs.mkShell {
       name = "editorenv";
       packages = cfg.packages;

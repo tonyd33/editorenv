@@ -66,6 +66,60 @@ in
     touch $out
   '';
 
+  # Links the hook made and no longer generates are removed, along with the
+  # directories that leaves empty. Anything else is left alone.
+  shell-hook-prune =
+    let
+      hookOf =
+        modules:
+        lib.escapeShellArg
+          (editorenv.mkProject {
+            inherit pkgs;
+            inherit modules;
+          }).shell.hook;
+      neovim = hookOf [ { editors.neovim.enable = true; } ];
+      both = hookOf [
+        {
+          editors.neovim.enable = true;
+          editors.vscode.enable = true;
+        }
+      ];
+      none = hookOf [ ];
+    in
+    pkgs.runCommand "editorenv-shell-hook-prune" { } ''
+      set -euo pipefail
+      mkdir proj && cd proj
+      run_hook() { bash -euo pipefail -c "$1"; }
+
+      run_hook ${both}
+      [ -L .vscode/settings.json ] || { echo "not linked"; exit 1; }
+      [ "$(cat .editorenv/.gitignore)" = "*" ] || { echo "manifest dir not ignored"; exit 1; }
+      [ "$(cut -f1 .editorenv/links | sort | tr '\n' ' ')" = ".nvim.lua .vscode/extensions.json .vscode/settings.json " ] \
+        || { echo "wrong manifest:"; cat .editorenv/links; exit 1; }
+
+      run_hook ${neovim}
+      [ ! -e .vscode ] || { echo "stale links or their directory left behind"; ls -la .vscode; exit 1; }
+      [ -L .nvim.lua ] || { echo "removed a link still generated"; exit 1; }
+      [ "$(cut -f1 .editorenv/links)" = ".nvim.lua" ] || { echo "manifest not updated"; exit 1; }
+
+      run_hook ${both}
+      ln -sfn /elsewhere .vscode/settings.json
+      touch .vscode/launch.json
+      run_hook ${neovim}
+      [ "$(readlink .vscode/settings.json)" = /elsewhere ] || { echo "removed a retargeted link"; exit 1; }
+      [ ! -e .vscode/extensions.json ] || { echo "stale link left behind"; exit 1; }
+      [ -e .vscode/launch.json ] || { echo "removed a user file"; exit 1; }
+
+      run_hook ${none}
+      [ ! -e .nvim.lua ] || { echo "link left behind with nothing generated"; exit 1; }
+      [ ! -e .editorenv ] || { echo "manifest left behind with nothing linked"; exit 1; }
+
+      mkdir ../fresh && cd ../fresh
+      run_hook ${none}
+      [ -z "$(ls -A)" ] || { echo "empty config wrote files"; ls -A; exit 1; }
+      touch $out
+    '';
+
   vscode =
     let
       project = editorenv.mkProject {
@@ -267,13 +321,12 @@ in
         touch $out
       '';
 
-  # Nothing enabled -> no files, no hook, no packages.
+  # Nothing enabled -> no files, no packages.
   empty =
     let
       empty = editorenv.mkProject { inherit pkgs; };
     in
     assert empty.editors.files == { };
-    assert empty.shell.hook == "";
     assert empty.shell.packages == [ ];
     pkgs.runCommand "editorenv-empty" { } "touch $out";
 }
