@@ -243,7 +243,11 @@ the project on every shell entry:
 - A real (non-symlink) file at the target is left alone, with a warning. To
   keep a hand-written `.nvim.lua`, point `editors.neovim.path` elsewhere and
   `dofile()` the generated file from yours.
-- Links are not removed when you turn an editor off. Delete them by hand.
+- The links made are recorded in `.editorenv/links`. On the next shell entry, a
+  recorded link that is no longer generated (because you turned its editor off
+  or changed its path) is removed, along with any directories that leaves
+  empty. A link that has since been pointed somewhere else is left alone.
+  `.editorenv/` ignores itself, and is removed once nothing is linked.
 
 The link points into the Nix store, so ignore it:
 
