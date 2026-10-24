@@ -60,6 +60,27 @@ eq(seen.initializationOptions, { mode = "test" }, "initializationOptions receive
 eq(seen["workspace/configuration"], { { greeting = "hello", nested = { list = { 1, 2, 3 } } } }, "workspace/configuration answer")
 eq(seen.didChangeConfiguration, { fake = { greeting = "hello", nested = { list = { 1, 2, 3 } } } }, "didChangeConfiguration settings")
 
+-- :Format asks the server, then runs shout on the server's result.
+vim.cmd.Format()
+eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), { "formatted!", "content" }, "formatted by fake-ls, then shout")
+
+-- A chain of external formatters runs on save, each on the previous one's
+-- output, and replaces only the lines that changed.
+local path = os.getenv("PROJECT") .. "/main.fakefmt"
+vim.fn.writefile({ "keep", "content", "keep" }, path)
+vim.cmd.edit(vim.fn.fnameescape(path))
+vim.api.nvim_buf_set_mark(0, "a", 3, 2, {})
+vim.cmd.write()
+eq(vim.fn.readfile(path), { "keep", "CONTENT!", "keep" }, "formatted on save by fake-fmt, then shout")
+eq(vim.api.nvim_buf_get_mark(0, "a"), { 3, 2 }, "mark on an unchanged line")
+eq(vim.fn.readfile(os.getenv("FAKE_FMT_LOG")), { path }, "$FILENAME passed to fake-fmt")
+
+-- A failing step stops the chain and leaves the buffer alone, and the write
+-- still happens.
+vim.api.nvim_buf_set_lines(0, 0, -1, false, { "fail", "content" })
+vim.cmd.write()
+eq(vim.fn.readfile(path), { "fail", "content" }, "written unformatted after a failure")
+
 end
 
 local ok, err = pcall(run)

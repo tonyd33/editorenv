@@ -84,6 +84,9 @@ in
       settings = parse ".vscode/settings.json";
       extensions = parse ".vscode/extensions.json";
       exe = name: builtins.unsafeDiscardStringContext (lib.getExe project.lsp.servers.${name}.package);
+      fmt =
+        name: builtins.unsafeDiscardStringContext (lib.getExe project.format.formatters.${name}.package);
+      formatter = extension: { "editor.defaultFormatter" = extension; };
     in
     assert
       settings == {
@@ -100,18 +103,122 @@ in
         "nix.serverSettings".nixd.formatting.command = [ "nixfmt" ];
         "fake.greeting" = "hello";
         "editor.formatOnSave" = true;
+        "[nix]" = formatter "jnoortheen.nix-ide";
+        "nix.formatterPath" = [ (fmt "nixfmt") ];
+        "[typescript]" = formatter "esbenp.prettier-vscode";
+        "[shellscript]" = formatter "jkillian.custom-local-formatters";
+        "customLocalFormatters.formatters" = [
+          {
+            command = "${fmt "shfmt"} --filename '\${file}'";
+            languages = [ "shellscript" ];
+          }
+        ];
+        "[toml]" = formatter "tamasfe.even-better-toml";
+        "evenBetterToml.formatter.alignEntries" = true;
+        "[rust]" = formatter "rust-lang.rust-analyzer";
       };
     assert
       extensions == {
         recommendations = [
+          "esbenp.prettier-vscode"
           "example.other"
           "golang.go"
+          "jkillian.custom-local-formatters"
           "jnoortheen.nix-ide"
           "rust-lang.rust-analyzer"
+          "tamasfe.even-better-toml"
         ];
         unwantedRecommendations = [ "sumneko.lua" ];
       };
+    assert lib.elem project.format.formatters.shfmt.package project.shell.packages;
     pkgs.runCommand "editorenv-vscode" { } "touch $out";
+
+  # Steps name formatters and enabled servers, and VS Code takes one per filetype.
+  format-errors =
+    let
+      eval = modules: (editorenv.evalConfig { inherit modules; }).config;
+      fails =
+        modules:
+        let
+          files = (eval modules).editors.files;
+        in
+        !(builtins.tryEval (builtins.deepSeq files files)).success;
+      neovim.editors.neovim.enable = true;
+      vscode.editors.vscode.enable = true;
+      formatters.format.formatters = {
+        a.command = [ "a" ];
+        b.command = [ "b" ];
+        off = {
+          enable = false;
+          command = [ "off" ];
+        };
+      };
+      chain.format.filetypes.x = [
+        "a"
+        "b"
+      ];
+    in
+    assert fails [
+      neovim
+      { format.filetypes.x = [ "missing" ]; }
+    ];
+    assert fails [
+      neovim
+      { format.filetypes.x = [ { lsp = "missing"; } ]; }
+    ];
+    assert fails [
+      neovim
+      {
+        format.filetypes.x = [ { lsp = "off"; } ];
+        lsp.servers.off.enable = false;
+      }
+    ];
+    assert fails [
+      neovim
+      {
+        format.formatters.empty = { };
+        format.filetypes.x = [ "empty" ];
+      }
+    ];
+    assert fails [
+      vscode
+      {
+        format.filetypes.x = [ { lsp = "fake"; } ];
+        lsp.servers.fake = { };
+      }
+    ];
+    assert fails [
+      vscode
+      formatters
+      chain
+    ];
+    assert
+      !fails [
+        neovim
+        formatters
+        chain
+      ];
+    assert
+      (eval [
+        formatters
+        {
+          format.filetypes = {
+            x = [
+              "off"
+              "a"
+            ];
+            y = [ "off" ];
+          };
+        }
+      ]).format.byFiletype == {
+        x = [
+          {
+            formatter = "a";
+            command = [ "a" ];
+          }
+        ];
+      };
+    pkgs.runCommand "editorenv-format-errors" { } "touch $out";
 
   editorconfig =
     let

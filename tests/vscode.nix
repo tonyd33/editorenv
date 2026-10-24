@@ -34,5 +34,39 @@
     rust_analyzer.settings."rust-analyzer.check.command" = "clippy";
   };
 
+  format = {
+    formatters = {
+      nixfmt.package = pkgs.writeShellScriptBin "nixfmt" "";
+      prettier.command = [ "prettier" ];
+      # Unknown to editorenv: runs through custom-local-formatters.
+      shfmt = {
+        package = pkgs.writeShellScriptBin "shfmt" "";
+        command = [
+          "shfmt"
+          "--filename"
+          "$FILENAME"
+        ];
+      };
+      taplo.command = [
+        "taplo"
+        "fmt"
+        "-"
+      ];
+    };
+    filetypes = {
+      nix = [ "nixfmt" ];
+      typescript = [ "prettier" ];
+      sh = [ "shfmt" ];
+      bash = [ "shfmt" ];
+      toml = [ "taplo" ];
+      rust = [ { lsp = "rust_analyzer"; } ];
+    };
+  };
+
+  editors.vscode.formatters.taplo = {
+    extension = "tamasfe.even-better-toml";
+    settings."evenBetterToml.formatter.alignEntries" = true;
+  };
+
   editors.vscode.settings."editor.formatOnSave" = true;
 }

@@ -2,7 +2,8 @@
 """A minimal LSP server for tests.
 
 Records what the client sends (initializationOptions, workspace/configuration
-answers, didChangeConfiguration settings) as JSON lines in $FAKE_LS_LOG.
+answers, didChangeConfiguration settings) as JSON lines in $FAKE_LS_LOG. Formatting
+prepends a "formatted" line.
 """
 import json
 import os
@@ -42,7 +43,8 @@ while (msg := read()) is not None:
     method = msg.get("method")
     if method == "initialize":
         log("initializationOptions", msg["params"].get("initializationOptions"))
-        send({"id": msg["id"], "result": {"capabilities": {}}})
+        send({"id": msg["id"],
+              "result": {"capabilities": {"documentFormattingProvider": True}}})
     elif method == "initialized":
         send({"id": 1000, "method": "workspace/configuration",
               "params": {"items": [{"section": "fake"}]}})
@@ -50,6 +52,10 @@ while (msg := read()) is not None:
         log("workspace/configuration", msg.get("result"))
     elif method == "workspace/didChangeConfiguration":
         log("didChangeConfiguration", msg["params"].get("settings"))
+    elif method == "textDocument/formatting":
+        start = {"line": 0, "character": 0}
+        send({"id": msg["id"],
+              "result": [{"range": {"start": start, "end": start}, "newText": "formatted\n"}]})
     elif method == "shutdown":
         send({"id": msg["id"], "result": None})
     elif method == "exit":

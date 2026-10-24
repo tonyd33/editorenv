@@ -27,6 +27,7 @@ printf '#!/bin/sh\nexec %s %s "$@"\n' "$python" "$here/fake_ls.py" > "$tmp/bin/f
 chmod +x "$tmp/bin/fake-ls"
 export PATH=$tmp/bin:$PATH
 export FAKE_LS_LOG=$tmp/fake-ls.log
+export FAKE_FMT_LOG=$tmp/fake-fmt.log
 
 # Isolated Neovim state. The user config goes in the standard location: `-u`
 # skips 'exrc'. Pre-trust the file as `:trust` records it, by its hash and

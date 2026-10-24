@@ -11,4 +11,7 @@
 
   # ...or declare servers devenv has no language module for.
   lsp.servers.buf_ls.package = pkgs.buf;
+
+  # gopls formats Go, with gofumpt as set above.
+  format.filetypes.go = [ { lsp = "gopls"; } ];
 }

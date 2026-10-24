@@ -102,6 +102,114 @@ let
       )
     );
 
+  # Neovim filetype -> VS Code language id, where they differ.
+  languageIds = {
+    bash = "shellscript";
+    cs = "csharp";
+    make = "makefile";
+    objc = "objective-c";
+    objcpp = "objective-cpp";
+    sh = "shellscript";
+    tex = "latex";
+    text = "plaintext";
+    zsh = "shellscript";
+  }
+  // cfg.languageIds;
+  languageOf = ft: languageIds.${ft} or ft;
+
+  pinnedPath =
+    key: command:
+    lib.optionalAttrs (lib.hasInfix "/" (lib.head command)) { ${key} = [ (lib.head command) ]; };
+
+  nixFormatter = {
+    extension = "jnoortheen.nix-ide";
+    settings = command: {
+      "nix.formatterPath" = map (lib.replaceStrings [ "$FILENAME" ] [ "{file}" ]) command;
+    };
+  };
+
+  # Formatter id -> the extension that runs it, and the settings that point it
+  # at the formatter.
+  knownFormatters = {
+    alejandra = nixFormatter;
+    black = {
+      extension = "ms-python.black-formatter";
+      settings = pinnedPath "black-formatter.path";
+    };
+    nixfmt = nixFormatter;
+    nixpkgs-fmt = nixFormatter;
+    prettier.extension = "esbenp.prettier-vscode";
+    ruff = {
+      extension = "charliermarsh.ruff";
+      settings = pinnedPath "ruff.path";
+    };
+  };
+
+  genericFormatter = "jkillian.custom-local-formatters";
+
+  byFiletype = config.format.byFiletype;
+
+  overridden = id: cfg.formatters ? ${id} && cfg.formatters.${id}.extension != null;
+
+  # Filetype -> the extension that formats it, its settings, and the command
+  # custom-local-formatters runs, if it is that extension.
+  plan =
+    ft: steps:
+    let
+      step = lib.head steps;
+    in
+    if lib.length steps > 1 then
+      throw "editorenv: format.filetypes.${ft} has ${toString (lib.length steps)} steps, and VS Code runs one formatter per language."
+    else if step ? server then
+      let
+        extension = extensionOf step.server;
+      in
+      if extension == null then
+        throw "editorenv: format.filetypes.${ft} needs the VS Code extension of ${step.server}; set editors.vscode.servers.${step.server}.extension."
+      else
+        { inherit extension; }
+    else if overridden step.formatter then
+      { inherit (cfg.formatters.${step.formatter}) extension; }
+    else if knownFormatters ? ${step.formatter} then
+      {
+        inherit (knownFormatters.${step.formatter}) extension;
+        settings = (knownFormatters.${step.formatter}.settings or (_: { })) step.command;
+      }
+    else
+      {
+        extension = genericFormatter;
+        command = lib.concatMapStringsSep " " (
+          arg: lib.escapeShellArg (lib.replaceStrings [ "$FILENAME" ] [ "\${file}" ] arg)
+        ) step.command;
+      };
+
+  plans = lib.mapAttrs plan byFiletype;
+
+  formatExtensions = lib.unique (lib.mapAttrsToList (_: p: p.extension) plans);
+
+  generic = lib.filterAttrs (_: p: p ? command) plans;
+
+  genericFormatters = lib.mapAttrsToList (_: fts: {
+    inherit (plans.${lib.head fts}) command;
+    languages = lib.naturalSort (lib.unique (map languageOf fts));
+  }) (lib.groupBy (ft: (lib.head byFiletype.${ft}).formatter) (lib.attrNames generic));
+
+  formatSettings = lib.foldl' lib.recursiveUpdate { } (
+    lib.mapAttrsToList (ft: p: {
+      "[${languageOf ft}]" = {
+        "editor.defaultFormatter" = p.extension;
+      }
+      // lib.optionalAttrs config.format.onSave { "editor.formatOnSave" = true; };
+    }) plans
+    ++ lib.mapAttrsToList (_: p: p.settings or { }) plans
+    ++ lib.mapAttrsToList (_: f: f.settings) cfg.formatters
+    ++ [
+      (lib.optionalAttrs (genericFormatters != [ ]) {
+        "customLocalFormatters.formatters" = genericFormatters;
+      })
+    ]
+  );
+
   toJSON =
     indent: v:
     let
@@ -124,7 +232,11 @@ let
   '';
 
   settings = lib.foldl' lib.recursiveUpdate { } (
-    lib.mapAttrsToList serverSettings (lib.filterAttrs (_: s: s.enable) servers) ++ [ cfg.settings ]
+    lib.mapAttrsToList serverSettings (lib.filterAttrs (_: s: s.enable) servers)
+    ++ [
+      formatSettings
+      cfg.settings
+    ]
   );
 in
 {
@@ -177,6 +289,41 @@ in
       description = "VS Code-specific settings for servers declared in `lsp.servers`.";
     };
 
+    formatters = mkOption {
+      type = types.attrsOf (
+        types.submodule {
+          options = {
+            extension = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              example = "foxundermoon.shell-format";
+              description = ''
+                Id of the extension that runs the formatter. `null` uses the one
+                editorenv knows for this formatter id, else
+                `${genericFormatter}` running `command`.
+              '';
+            };
+            settings = mkOption {
+              type = types.attrsOf types.anything;
+              default = { };
+              description = "VS Code settings for this formatter.";
+            };
+          };
+        }
+      );
+      default = { };
+      description = "VS Code-specific settings for formatters declared in `format.formatters`.";
+    };
+
+    languageIds = mkOption {
+      type = types.attrsOf types.str;
+      default = { };
+      example = {
+        fish = "fish";
+      };
+      description = "VS Code language ids of Neovim filetypes, where editorenv doesn't know them.";
+    };
+
     settings = mkOption {
       type = types.attrsOf types.anything;
       default = { };
@@ -194,7 +341,11 @@ in
     // lib.optionalAttrs (cfg.extensionsPath != null) {
       ${cfg.extensionsPath}.text = render {
         recommendations = lib.naturalSort (
-          extensionsWhere true ++ lib.optional config.editors.editorconfig.enable "editorconfig.editorconfig"
+          lib.unique (
+            extensionsWhere true
+            ++ formatExtensions
+            ++ lib.optional config.editors.editorconfig.enable "editorconfig.editorconfig"
+          )
         );
         unwantedRecommendations = extensionsWhere false;
       };

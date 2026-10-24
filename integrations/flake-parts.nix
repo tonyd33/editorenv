@@ -32,7 +32,7 @@ in
           files. Add it to your own shell with `inputsFrom`, or use it as-is.
         '';
         shellHook = output types.lines "Shell code that links the generated files into the project.";
-        packages = output (types.listOf types.package) "Packages the shell needs (the enabled servers).";
+        packages = output (types.listOf types.package) "Packages the shell needs (the enabled servers and formatters).";
         files = output (types.attrsOf types.package) "The generated files as store paths, keyed by project-relative path.";
       };
 
