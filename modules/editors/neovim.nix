@@ -32,6 +32,95 @@ let
       lib.optionalString (table != { }) "vim.lsp.config(${name}, ${toLua table})\n"
       + "vim.lsp.enable(${name})\n";
 
+  byFiletype = config.format.byFiletype;
+
+  formatLua = ''
+
+    do
+      local chains = ${
+        toLua (
+          lib.mapAttrs (
+            _:
+            map (step: if step ? server then { server = nameOf step.server; } else { inherit (step) command; })
+          ) byFiletype
+        )
+      }
+      local diff = vim.text and vim.text.diff or vim.diff
+
+      local function text_of(buf)
+        return table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n") .. "\n"
+      end
+
+      local function run(command, file, input)
+        local argv = vim.tbl_map(function(arg)
+          return (arg:gsub("%$FILENAME", function() return file end))
+        end, command)
+        local ok, result = pcall(function()
+          return vim.system(argv, { stdin = input, text = true }):wait()
+        end)
+        if not ok or result.code ~= 0 then
+          vim.notify(("%s: %s"):format(argv[1], ok and result.stderr or result), vim.log.levels.WARN)
+          return nil
+        end
+        local output = result.stdout
+        if output:sub(-1) ~= "\n" then
+          output = output .. "\n"
+        end
+        return output
+      end
+
+      local function apply(buf, output)
+        local lines = vim.split(output, "\n", { plain = true })
+        table.remove(lines)
+        local hunks = diff(text_of(buf), output, { result_type = "indices" })
+        for i = #hunks, 1, -1 do
+          local a, a_count, b, b_count = unpack(hunks[i])
+          local first = a_count == 0 and a or a - 1
+          vim.api.nvim_buf_set_lines(buf, first, first + a_count, false, vim.list_slice(lines, b, b + b_count - 1))
+        end
+      end
+
+      local function format(buf)
+        local steps = chains[vim.bo[buf].filetype]
+        if not steps then
+          return
+        end
+        local file = vim.api.nvim_buf_get_name(buf)
+        local pending
+        for _, step in ipairs(steps) do
+          if step.server then
+            if pending then
+              apply(buf, pending)
+              pending = nil
+            end
+            vim.lsp.buf.format({ bufnr = buf, name = step.server })
+          else
+            pending = run(step.command, file, pending or text_of(buf))
+            if not pending then
+              return
+            end
+          end
+        end
+        if pending then
+          apply(buf, pending)
+        end
+      end
+
+      vim.api.nvim_create_user_command("Format", function()
+        format(vim.api.nvim_get_current_buf())
+      end, { desc = "Format the buffer with the project's formatter" })
+
+      if ${toLua config.format.onSave} then
+        vim.api.nvim_create_autocmd("BufWritePre", {
+          group = vim.api.nvim_create_augroup("editorenv_format", {}),
+          callback = function(ev)
+            format(ev.buf)
+          end,
+        })
+      end
+    end
+  '';
+
   servers = config.lsp.servers;
   # Enabled servers first, then disables, each sorted by id. Any change to the
   # output makes Neovim ask for trust again.
@@ -108,6 +197,7 @@ in
       + lib.concatStrings (
         map (id: renderServer id servers.${id}) (lib.sort ordering (lib.attrNames servers))
       )
+      + lib.optionalString (byFiletype != { }) formatLua
       + lib.optionalString (cfg.extraLua != "") "\n${cfg.extraLua}";
     }
     (lib.mkIf cfg.enable {

@@ -6,4 +6,4 @@ if lspconfig and lspconfig ~= "" then
 end
 vim.o.exrc = true
 vim.lsp.enable("ts_ls")
-vim.filetype.add({ extension = { fake = "fakelang" } })
+vim.filetype.add({ extension = { fake = "fakelang", fakefmt = "fakefmt" } })

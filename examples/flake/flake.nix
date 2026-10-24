@@ -22,6 +22,17 @@
               package = pkgs.zls;
               settings.zls.enable_build_on_save = true;
             };
+
+            format.formatters.zig_fmt = {
+              package = pkgs.zig;
+              command = [
+                "zig"
+                "fmt"
+                "--stdin"
+              ];
+            };
+            format.filetypes.zig = [ "zig_fmt" ];
+            format.onSave = true;
           }
         ];
       };

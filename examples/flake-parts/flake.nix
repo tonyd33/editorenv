@@ -37,6 +37,12 @@
               nixd.package = pkgs.nixd;
             };
 
+            format.formatters.nixfmt.package = pkgs.nixfmt;
+            format.filetypes = {
+              nix = [ "nixfmt" ];
+              rust = [ { lsp = "rust_analyzer"; } ];
+            };
+
             # Neovim-only extras, merged into vim.lsp.config("rust_analyzer", ...).
             editors.neovim.servers.rust_analyzer.config.on_attach = lib.generators.mkLuaInline ''
               function(_, buf) vim.lsp.inlay_hint.enable(true, { bufnr = buf }) end

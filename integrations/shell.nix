@@ -94,7 +94,7 @@ in
     packages = mkOption {
       type = types.listOf types.package;
       readOnly = true;
-      description = "Packages the shell needs (the enabled servers).";
+      description = "Packages the shell needs (the enabled servers and formatters).";
     };
 
     hook = mkOption {
@@ -118,7 +118,7 @@ in
 
   config.shell = {
     files = generated;
-    packages = config.lsp.packages;
+    packages = lib.unique (config.lsp.packages ++ config.format.packages);
     hook = if generated == { } then "" else hook;
     devShell = pkgs.mkShell {
       name = "editorenv";

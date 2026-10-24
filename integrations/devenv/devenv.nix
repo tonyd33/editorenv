@@ -5,7 +5,7 @@
   imports = import ../../modules ++ [ ./languages.nix ];
 
   config = {
-    packages = config.lsp.packages;
+    packages = lib.unique (config.lsp.packages ++ config.format.packages);
     files = lib.mapAttrs (_: file: { inherit (file) text; }) config.editors.files;
   };
 }

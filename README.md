@@ -173,6 +173,61 @@ and a later section overrides an earlier one where both match. Neovim reads
 `.editorconfig` natively. With `editors.vscode` also enabled, `extensions.json`
 recommends `editorconfig.editorconfig`.
 
+## Formatters
+
+```nix
+format.formatters = {
+  nixfmt.package = pkgs.nixfmt;             # added to the project shell
+  ruff_fix = {
+    package = pkgs.ruff;
+    command = [ "ruff" "check" "--fix" "--stdin-filename" "$FILENAME" "-" ];
+  };
+  ruff_format = {
+    package = pkgs.ruff;
+    command = [ "ruff" "format" "--stdin-filename" "$FILENAME" "-" ];
+  };
+};
+format.filetypes = {
+  nix = [ "nixfmt" ];
+  python = [ "ruff_fix" "ruff_format" ];    # run in order
+  rust = [ { lsp = "rust_analyzer"; } ];    # formatted by the language server
+};
+format.onSave = true;
+```
+
+A formatter reads the file on stdin and writes the result to stdout.
+`$FILENAME` in `command` is replaced by the file's path. `command` defaults to
+the package's main program, and a bare executable name in it resolves to the
+package's `bin/`, so neither editor needs starting from the dev shell.
+
+`format.filetypes` uses Neovim's filetype names. Each step is a formatter id or
+`{ lsp = <server id>; }`, and each step formats the previous step's output.
+Disabled formatters are skipped. A step naming a missing formatter, or a server
+that is missing or disabled, is an evaluation error.
+
+In Neovim, `.nvim.lua` defines `:Format` and, with `onSave`, a `BufWritePre`
+autocmd. It needs no plugin. It replaces only the lines that changed, so marks
+and the cursor on other lines stay put. `lsp` steps go through
+`vim.lsp.buf.format`. A step that fails shows its stderr and stops the chain,
+and the output of the external steps since the last `lsp` step is discarded.
+
+In VS Code, each filetype gets `editor.defaultFormatter` under its language
+(`[nix]`, `[shellscript]`). VS Code runs one formatter per language, so a
+filetype with more than one step is an evaluation error.
+
+- Formatters editorenv knows (`nixfmt`, `alejandra`, `nixpkgs-fmt`, `prettier`,
+  `ruff`, `black`) run through their own extension. A pinned executable is
+  passed to it where the extension takes a path. `nix-ide` ignores
+  `nix.formatterPath` while its language server is enabled.
+- Any other formatter runs through `jkillian.custom-local-formatters`, which
+  runs `command` from the workspace root.
+- `lsp` steps use the server's extension.
+
+Extensions are added to `extensions.json`. Set
+`editors.vscode.formatters.<id>.extension` to use a different extension, and
+`editors.vscode.languageIds.<filetype>` when a VS Code language id differs from
+the Neovim filetype in a way editorenv doesn't know.
+
 ## How the file gets into the project
 
 devenv writes the generated files through its own `files` option.
@@ -215,6 +270,16 @@ Ids follow [nvim-lspconfig's names](https://github.com/neovim/nvim-lspconfig/tre
 | `settings` | Returned for `workspace/configuration` requests. JSON-shaped. |
 | `initializationOptions` | Sent in the `initialize` request. |
 
+### `format`
+
+| Option | |
+|---|---|
+| `formatters.<id>.enable` | Default `true`. |
+| `formatters.<id>.package` | Added to the project shell. Resolves a bare executable in `command`. |
+| `formatters.<id>.command` | stdin to stdout. `$FILENAME` is the file's path. Defaults to the package's main program. |
+| `filetypes.<filetype>` | Steps run in order: formatter ids, or `{ lsp = <server id>; }`. |
+| `onSave` | Default `false`. |
+
 ### `editors.neovim`
 
 | Option | |
@@ -234,6 +299,9 @@ Ids follow [nvim-lspconfig's names](https://github.com/neovim/nvim-lspconfig/tre
 | `extensionsPath` | Default `.vscode/extensions.json`. `null` skips it. |
 | `servers.<id>.extension` | Extension that runs the server, when editorenv doesn't know it. |
 | `servers.<id>.settings` | VS Code settings merged over the derived ones. |
+| `formatters.<id>.extension` | Extension that runs the formatter, instead of the known one or `custom-local-formatters`. |
+| `formatters.<id>.settings` | VS Code settings for the formatter. |
+| `languageIds.<filetype>` | VS Code language id of a Neovim filetype. |
 | `settings` | Workspace settings merged over everything else. |
 
 ### `editors.editorconfig`
