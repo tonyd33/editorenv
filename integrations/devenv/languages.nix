@@ -77,7 +77,9 @@ in
   };
 
   config = lib.mkIf config.lsp.fromLanguages {
-    lsp.servers = lib.mapAttrs' (_: id: lib.nameValuePair id { }) known;
+    lsp.servers = lib.mapAttrs' (
+      lang: id: lib.nameValuePair id { package = lib.mkDefault enabledServers.${lang}; }
+    ) known;
 
     warnings = map (
       lang:

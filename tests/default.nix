@@ -321,6 +321,151 @@ in
         touch $out
       '';
 
+  # Known ids default `command`, `filetypes` and `rootMarkers`, a bare command
+  # resolves into the package, explicit values win, and Neovim warns about any
+  # enabled server it cannot start on its own.
+  server-defaults =
+    let
+      zls = pkgs.writeShellScriptBin "zls" "";
+      eval = modules: (editorenv.evalConfig { inherit modules; }).config;
+      neovim.editors.neovim.enable = true;
+      text =
+        modules:
+        builtins.unsafeDiscardStringContext (eval ([ neovim ] ++ modules)).editors.files.".nvim.lua".text;
+      exe = name: builtins.unsafeDiscardStringContext "${zls}/bin/${name}";
+      warnings = modules: (eval ([ neovim ] ++ modules)).editors.warnings;
+
+      known = (eval [ { lsp.servers.zls.package = zls; } ]).lsp.servers.zls;
+      overridden =
+        (eval [
+          {
+            lsp.servers.zls = {
+              package = zls;
+              command = [
+                "my-zls"
+                "--flag"
+              ];
+              filetypes = [ "zig" ];
+              rootMarkers = [ "build.zig" ];
+            };
+          }
+        ]).lsp.servers.zls;
+      deferred =
+        (eval [
+          {
+            lsp.servers.zls = {
+              command = null;
+              filetypes = null;
+              rootMarkers = null;
+            };
+          }
+        ]).lsp.servers.zls;
+    in
+    assert known.command == [ "zls" ];
+    assert
+      known.filetypes == [
+        "zig"
+        "zir"
+      ];
+    assert
+      known.rootMarkers == [
+        "zls.json"
+        "build.zig"
+        ".git"
+      ];
+    assert lib.hasInfix ''"${exe "zls"}"'' (text [ { lsp.servers.zls.package = zls; } ]);
+
+    assert
+      overridden.command == [
+        "my-zls"
+        "--flag"
+      ];
+    assert overridden.filetypes == [ "zig" ];
+    assert overridden.rootMarkers == [ "build.zig" ];
+    assert lib.hasInfix "\"${exe "my-zls"}\",\n    \"--flag\"" (text [
+      {
+        lsp.servers.zls = {
+          package = zls;
+          command = [
+            "my-zls"
+            "--flag"
+          ];
+        };
+      }
+    ]);
+    assert lib.hasInfix ''"/opt/zls"'' (text [
+      {
+        lsp.servers.zls = {
+          package = zls;
+          command = [ "/opt/zls" ];
+        };
+      }
+    ]);
+    assert deferred.command == null && deferred.filetypes == null && deferred.rootMarkers == null;
+
+    assert (eval [ { lsp.servers.fake = { }; } ]).editors.warnings == [ ];
+    assert warnings [ { lsp.servers.zls = { }; } ] == [ ];
+    assert
+      warnings [ { lsp.servers.fake = { }; } ] == [
+        "editorenv: lsp.servers.fake has no cmd or filetypes for Neovim, so it starts only if nvim-lspconfig is installed. Set `command` and `filetypes` to make it self-contained."
+      ];
+    assert
+      warnings [ { lsp.servers.fake.command = [ "fake-ls" ]; } ] == [
+        "editorenv: lsp.servers.fake has no filetypes for Neovim, so it starts only if nvim-lspconfig is installed. Set `command` and `filetypes` to make it self-contained."
+      ];
+    assert lib.length (warnings [ { lsp.servers.zls.filetypes = null; } ]) == 1;
+    assert warnings [ { lsp.servers.fake.enable = false; } ] == [ ];
+    assert
+      warnings [
+        {
+          lsp.servers.fake = {
+            command = [ "fake-ls" ];
+            filetypes = [ "fakelang" ];
+          };
+        }
+      ] == [ ];
+    assert
+      warnings [
+        {
+          lsp.servers.fake = { };
+          editors.neovim.servers.fake.config = {
+            cmd = [ "fake-ls" ];
+            filetypes = [ "fakelang" ];
+          };
+        }
+      ] == [ ];
+    pkgs.runCommand "editorenv-server-defaults" { } "touch $out";
+
+  # devenv's `languages.<lang>.lsp.package` becomes the server's package.
+  devenv-languages =
+    let
+      zls = pkgs.writeShellScriptBin "zls" "";
+      config =
+        (editorenv.evalConfig {
+          modules = [
+            ../integrations/devenv/languages.nix
+            {
+              options.languages = lib.mkOption { type = lib.types.attrsOf lib.types.anything; };
+              options.warnings = lib.mkOption { type = lib.types.listOf lib.types.str; };
+              config.languages.zig = {
+                enable = true;
+                lsp = {
+                  enable = true;
+                  package = zls;
+                };
+              };
+              config.editors.neovim.enable = true;
+            }
+          ];
+        }).config;
+    in
+    assert config.lsp.servers.zls.package == zls;
+    assert lib.hasInfix (builtins.unsafeDiscardStringContext "${zls}/bin/zls") (
+      builtins.unsafeDiscardStringContext config.editors.files.".nvim.lua".text
+    );
+    assert config.warnings == [ ];
+    pkgs.runCommand "editorenv-devenv-languages" { } "touch $out";
+
   # Nothing enabled -> no files, no packages.
   empty =
     let

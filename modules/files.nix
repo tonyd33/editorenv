@@ -1,5 +1,11 @@
 { lib, ... }:
 {
+  options.editors.warnings = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    default = [ ];
+    description = "Problems with the generated files. Integrations show them at evaluation.";
+  };
+
   options.editors.files = lib.mkOption {
     type = lib.types.attrsOf (
       lib.types.submodule {

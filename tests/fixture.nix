@@ -24,8 +24,12 @@
       initializationOptions.mode = "test";
     };
 
-    # Relies on nvim-lspconfig's defaults for cmd/filetypes.
-    zls.settings.zls.enable_build_on_save = true;
+    # Known id: cmd, filetypes and root markers come from editorenv's defaults,
+    # with cmd resolved into the package.
+    zls = {
+      package = pkgs.writeShellScriptBin "zls" "";
+      settings.zls.enable_build_on_save = true;
+    };
 
     # Settings key with a dash.
     rust_analyzer.settings."rust-analyzer".cargo.features = "all";

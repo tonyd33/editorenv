@@ -2,9 +2,13 @@
 { lib, config, ... }:
 let
   inherit (lib) mkOption types;
+  defaults = import ./server-defaults.nix;
 
   serverModule =
     { name, ... }:
+    let
+      known = field: defaults.${name}.${field} or null;
+    in
     {
       options = {
         enable = mkOption {
@@ -23,44 +27,51 @@ let
           example = lib.literalExpression "pkgs.zls";
           description = ''
             Package providing the server executable. It is added to the
-            project shell. Leave `null` when something else already provides
-            the executable (the language toolchain, or devenv's
-            `languages.<lang>.lsp.package`).
+            project shell, and a bare executable name in `command` resolves to
+            its `bin/`, so editors needn't be started from the shell. Leave
+            `null` when something else already provides the executable.
           '';
         };
 
         command = mkOption {
           type = types.nullOr (types.listOf types.str);
-          default = null;
+          default = known "command";
           example = [
             "zls"
             "--enable-debug-log"
           ];
           description = ''
-            Command (and arguments) that starts the server. `null` defers to
-            the editor's built-in default for `${name}` (for Neovim, the one
-            shipped by nvim-lspconfig).
+            Command (and arguments) that starts the server. A bare executable
+            name resolves to the `bin/` of `package`, when set. Defaults to
+            nvim-lspconfig's command for known ids. `null` defers to the
+            editor's default for `${name}`.
           '';
         };
 
         filetypes = mkOption {
           type = types.nullOr (types.listOf types.str);
-          default = null;
+          default = known "filetypes";
           example = [
             "zig"
             "zir"
           ];
-          description = "Filetypes the server attaches to. `null` uses the editor default.";
+          description = ''
+            Filetypes the server attaches to. Defaults to nvim-lspconfig's for
+            known ids. `null` uses the editor default.
+          '';
         };
 
         rootMarkers = mkOption {
           type = types.nullOr (types.listOf types.str);
-          default = null;
+          default = known "rootMarkers";
           example = [
             "build.zig"
             ".git"
           ];
-          description = "Files that mark the workspace root. `null` uses the editor default.";
+          description = ''
+            Files that mark the workspace root, searched for in order. Defaults
+            to nvim-lspconfig's for known ids. `null` uses the editor default.
+          '';
         };
 
         settings = mkOption {
