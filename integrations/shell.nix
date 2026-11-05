@@ -10,10 +10,10 @@ let
   inherit (lib) mkOption types;
   cfg = config.shell;
 
-  generated = lib.mapAttrs (
+  generated = lib.foldr lib.warn (lib.mapAttrs (
     path: file:
     pkgs.writeText (lib.replaceStrings [ "/" ] [ "-" ] (lib.removePrefix "." path)) file.text
-  ) config.editors.files;
+  ) config.editors.files) config.editors.warnings;
 
   hook = ''
     __editorenv_link() {

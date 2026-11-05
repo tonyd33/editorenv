@@ -8,10 +8,20 @@ let
 
   nonEmpty = v: v != null && v != { } && v != [ ];
 
+  resolve =
+    server:
+    let
+      cmd = server.command;
+    in
+    if nonEmpty cmd && server.package != null && !lib.hasInfix "/" (lib.head cmd) then
+      [ "${server.package}/bin/${lib.head cmd}" ] ++ lib.tail cmd
+    else
+      cmd;
+
   serverTable =
     id: server:
     lib.recursiveUpdate (lib.filterAttrs (_: nonEmpty) {
-      cmd = server.command;
+      cmd = resolve server;
       inherit (server) filetypes settings;
       root_markers = server.rootMarkers;
       init_options = server.initializationOptions;
@@ -125,6 +135,24 @@ let
   # Enabled servers first, then disables, each sorted by id. Any change to the
   # output makes Neovim ask for trust again.
   ordering = a: b: if servers.${a}.enable != servers.${b}.enable then servers.${a}.enable else a < b;
+
+  missing =
+    id:
+    let
+      table = serverTable id servers.${id};
+    in
+    lib.filter (field: !(table ? ${field})) [
+      "cmd"
+      "filetypes"
+    ];
+
+  warnings = lib.concatMap (
+    id:
+    lib.optional (servers.${id}.enable && missing id != [ ]) (
+      "editorenv: lsp.servers.${id} has no ${lib.concatStringsSep " or " (missing id)} for Neovim, "
+      + "so it starts only if nvim-lspconfig is installed. Set `command` and `filetypes` to make it self-contained."
+    )
+  ) (lib.attrNames servers);
 in
 {
   options.editors.neovim = {
@@ -202,6 +230,7 @@ in
     }
     (lib.mkIf cfg.enable {
       editors.files.${cfg.path}.text = cfg.text;
+      editors.warnings = warnings;
     })
   ];
 }

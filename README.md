@@ -23,6 +23,18 @@ if vim.fn.has("nvim-0.11") == 0 then
 end
 
 vim.lsp.config("zls", {
+  ["cmd"] = {
+    "/nix/store/...-zls/bin/zls"
+  },
+  ["filetypes"] = {
+    "zig",
+    "zir"
+  },
+  ["root_markers"] = {
+    "zls.json",
+    "build.zig",
+    ".git"
+  },
   ["settings"] = {
     ["zls"] = {
       ["enable_build_on_save"] = true
@@ -87,14 +99,15 @@ editors.neovim.enable = true;
 ```
 
 Servers enabled through devenv's `languages.<lang>.lsp` are added to
-`lsp.servers` for you, so this is enough to get gopls configured. Set
+`lsp.servers` for you, with `languages.<lang>.lsp.package` as their `package`,
+so this is enough to get gopls configured. Set
 `lsp.servers.gopls.settings` to configure it further, and declare servers devenv
 has no language module for directly.
 
 ### Anything else
 
 `imports = editorenv.modules;`, then consume `config.editors.files` and
-`config.lsp.packages`.
+`config.lsp.packages`, and show `config.editors.warnings`.
 
 Complete examples for the first three live in `examples/`.
 
@@ -107,16 +120,20 @@ vim.o.exrc = true  -- nixvim: opts.exrc = true;
 ```
 
 Neovim 0.11+ is required. It reads `.nvim.lua` only from the directory it was
-started in, so start it from the project root, inside the dev shell (the server
-binaries are only on `PATH` there).
+started in, so start it from the project root. A server with a `package` runs
+from the store, so Neovim needn't be started from the dev shell. Others are
+looked up on `PATH`.
 
 Neovim asks you to trust the file, and asks again whenever it changes. Trust is
 keyed by the file's resolved path (the store path behind the symlink) plus its
 hash, so `:trust` entries accumulate over time.
 
-Servers that only set `settings` inherit their `cmd` and `filetypes` from
-[nvim-lspconfig](https://github.com/neovim/nvim-lspconfig). Set `command` and
-`filetypes` for servers it doesn't know, or if you don't use it.
+editorenv knows `command`, `filetypes` and `rootMarkers` for the servers
+devenv's language modules enable, and a few more, so
+[nvim-lspconfig](https://github.com/neovim/nvim-lspconfig) is not needed for
+them. Any other server gets a warning at evaluation: without `command` and
+`filetypes`, Neovim starts it only if nvim-lspconfig is installed. Set them to
+silence it. For a known server, set them to `null` to use nvim-lspconfig's.
 
 ## VS Code
 
@@ -268,9 +285,9 @@ Ids follow [nvim-lspconfig's names](https://github.com/neovim/nvim-lspconfig/tre
 | Option | |
 |---|---|
 | `enable` | Default `true`. `false` actively disables the server in Neovim. |
-| `package` | Added to the project shell. |
-| `command` | Command and arguments. `null` uses the editor's default. |
-| `filetypes`, `rootMarkers` | `null` uses the editor's default. |
+| `package` | Added to the project shell. Resolves a bare executable in `command`. |
+| `command` | Command and arguments. Defaults to nvim-lspconfig's for known ids. `null` uses the editor's default. |
+| `filetypes`, `rootMarkers` | Default to nvim-lspconfig's for known ids. `null` uses the editor's default. |
 | `settings` | Returned for `workspace/configuration` requests. JSON-shaped. |
 | `initializationOptions` | Sent in the `initialize` request. |
 

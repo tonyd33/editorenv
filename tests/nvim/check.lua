@@ -24,13 +24,17 @@ eq(fake.init_options, { mode = "test" }, "fake.init_options")
 eq(fake.flags, { debounce_text_changes = 42 }, "fake.flags (editors.neovim.servers)")
 check(vim.lsp.is_enabled("fake"), "fake is not enabled")
 
--- Servers that lean on nvim-lspconfig: project settings merge over its defaults.
-eq(vim.lsp.config.zls.settings, { zls = { enable_build_on_save = true } }, "zls.settings")
+-- Known servers get cmd, filetypes and root markers with or without
+-- nvim-lspconfig, and project settings merge over them.
+local zls = vim.lsp.config.zls
+check(#zls.cmd == 1 and zls.cmd[1]:match("^/nix/store/[^/]+/bin/zls$"), "zls.cmd is not the package's zls: " .. vim.inspect(zls.cmd))
+eq(zls.filetypes, { "zig", "zir" }, "zls.filetypes")
+eq(zls.root_markers, { "zls.json", "build.zig", ".git" }, "zls.root_markers")
+eq(zls.settings, { zls = { enable_build_on_save = true } }, "zls.settings")
+eq(vim.lsp.config.rust_analyzer.cmd, { "rust-analyzer" }, "rust_analyzer.cmd without a package")
+eq(vim.lsp.config.rust_analyzer.filetypes, { "rust" }, "rust_analyzer.filetypes")
 eq(vim.lsp.config.rust_analyzer.settings["rust-analyzer"].cargo.features, "all", "rust_analyzer settings")
 check(type(vim.lsp.config.rust_analyzer.on_attach) == "function", "rust_analyzer.on_attach is not a function")
-if with_lspconfig then
-  eq(vim.lsp.config.zls.cmd, { "zls" }, "zls.cmd from nvim-lspconfig")
-end
 check(vim.lsp.is_enabled("zls"), "zls is not enabled")
 
 -- Disabled by the project although the user's config enabled it.
